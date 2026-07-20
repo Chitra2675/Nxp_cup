@@ -13,8 +13,11 @@ Follow these quick steps to install the tool on your system:
    Ensure you have downloaded the latest `buggy-control-panel.deb` file.
 
 2. **Install the Package:**
+   Make sure you already completed installation steps from [Main Readme](README.md)
+
    Open your terminal in the directory where the package is saved and run:
    ```bash
+   cd ~/cognipilot/cranium/NXP_CUP_INDIA_2026/
    sudo dpkg -i buggy-control-panel.deb
    ```
 
@@ -39,6 +42,7 @@ To launch the dashboard, open your terminal and run:
 ```bash
 buggy-control-panel
 ```
+![Buggy Control Panel](Images/BuggyControlPanel.png)
 
 This will spin up a local server running on port `8888`. You can access the interface by opening your web browser and navigating to:
 👉 **[http://localhost:8888/](http://localhost:8888/)**

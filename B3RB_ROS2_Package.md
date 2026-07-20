@@ -65,39 +65,7 @@ Use this to report your progress and receive targets:
 
 ---
 
-## 4. Compilation & Running
-
-Follow these steps to compile and launch the nodes:
-
-1.  **Source ROS 2 and build the workspace**:
-    ```bash
-    source /opt/ros/humble/setup.bash
-    colcon build --symlink-install
-    source install/setup.bash
-    ```
-    *Note: Using `--symlink-install` allows you to modify Python scripts in the `src/` directory and see changes take effect immediately without recompiling.*
-
-2.  **Run individual nodes in separate terminals**:
-    *   **Lane Vector Extractor**:
-        ```bash
-        ros2 run b3rb_ros_line_follower vectors
-        ```
-    *   **Sign Board Classifier**:
-        ```bash
-        ros2 run b3rb_ros_line_follower detect
-        ```
-    *   **QR Scanner Node**:
-        ```bash
-        ros2 run b3rb_ros_line_follower qr_detect
-        ```
-    *   **Main Runner/Controller**:
-        ```bash
-        ros2 run b3rb_ros_line_follower runner
-        ```
-
----
-
-## 5. Development Hints & Tasks
+## 4. Development Hints & Tasks
 
 1.  **Lane Following (`b3rb_ros_edge_vectors.py` & `b3rb_ros_line_follower.py`)**:
     *   The vector node provides a default threshold on gray scale. Optimize this by converting to **HSV space** and thresholding for black lane boundary markings.

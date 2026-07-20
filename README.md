@@ -15,6 +15,7 @@
     * [PART 2: Setting up the Competition Stack](#part-2-setting-up-the-competition-stack)
     * [PART 3: Understanding the Software Stack](#part-3-understanding-the-software-stack)
     * [PART 4: Build, Modify, Run the Simulation](#part-4-build-modify-run-the-simulation)
+* [Submission Rules](#submission-rules)
 
 
 ## **INTRODUCTION**
@@ -470,19 +471,9 @@ rm -rf ~/cognipilot
 
 Perform the following steps to setup the environment and build cranium for NXP CUP INDIA 2026:
 
-1.  **Setup Environment:**
-    > **DO THESE STEPS VERY CAREFULLY AND RESPONSIBLY !!!**
-    ```
-    cd ~/cognipilot/cranium/
-    rm -rf src install log build
-    ``` 
-    
-    ```
-    git clone https://github.com/NXP-Robotics/NXP_CUP_INDIA_2026.git
-    mv NXP_CUP_INDIA_2026/src .
-    ```
+> **DO THESE STEPS VERY CAREFULLY AND RESPONSIBLY !!!**
 
-2.  **Install Dependencies:** (The following modules are allowed for use in your solution.)
+1.  **Install Dependencies:** (The following modules are allowed for use in your solution.)
     - **ALERT: If you wish to use an additional python module, refer "SUBMISSION RULES" below**
     ```bash
     pip install \
@@ -497,6 +488,17 @@ Perform the following steps to setup the environment and build cranium for NXP C
         matplotlib==3.5.1 \
         pyyaml==6.0.2 \
         tflite-runtime==2.14.0
+    ```
+
+2.  **Setup Environment:**
+    ```
+    cd ~/cognipilot/cranium/
+    rm -rf src install log build
+    ``` 
+    
+    ```
+    git clone https://github.com/NXP-Robotics/NXP_CUP_INDIA_2026.git
+    mv NXP_CUP_INDIA_2026/src .
     ```
 
 ### **PART 3: Understanding the Software Stack**
