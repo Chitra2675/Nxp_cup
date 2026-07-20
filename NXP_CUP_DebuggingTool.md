@@ -63,5 +63,5 @@ Using the **NXP CUP Debugging Tool** is straightforward:
   * 💡 *Pro Tip:* You can create custom topics, publish messages from your buggy's code, and seamlessly visualize the outputs here.
 * **Data Terminals:** Monitor textual and structured JSON messages flowing through active topics in real time.
 * **Server Communication Simulator:** 
-  * Includes a built-in module to simulate server messages on the `serverCommunication` topic.
+  * Includes a built-in module to simulate server messages on the `ServerCommunication` topic.
   * You can fill out and publish custom messages to test if your buggy correctly parses incoming server instructions and replies with the appropriate acknowledgment (`ack`) messages.

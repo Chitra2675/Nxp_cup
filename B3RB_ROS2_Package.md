@@ -76,7 +76,7 @@ Use this to report your progress and receive targets:
 3.  **Sign Board Detection (`b3rb_ros_object_recog.py`)**:
     *   You may use color or shape to isolate sign boards.
     *   You may use ROI (regions of interest) to differentiate between multiple sign boards in same frame. 
-    *   If TensorFlow/Keras is available, load the provided `model.h5` model to classify the sign board type and send the label to the runner.
+    *   Develop your own model to classify the sign board type and send the label to the runner.
 4.  **Patient/Hospital QR & Range Scan (`b3rb_ros_qr_detector.py` & `b3rb_ros_line_follower.py`)**:
     *   Scan for QR codes using `cv2.QRCodeDetector()` or `pyzbar`.
     *   Compare the scanned string payload to the target destination provided by the server.

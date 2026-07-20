@@ -120,9 +120,9 @@ Participants must interpret these signs and take the correct turns at intersecti
 **Answer:** After delivering the third patient, participants may attempt the bonus task:
 1. Exit the city through the designated exit, which is located **in front of the final hospital delivery zone**
 2. Navigate to the parking area
-3. Send a **"Parked"** message to the Municipality Server while inside the parking area **within 1 minute** of entering parking
+3. Send a **"PARKED"** message to the Municipality Server while inside the parking area **within 1 minute** of entering parking
 
-Bonus points are awarded even if the buggy is still moving, as long as it is inside the parking area when the "Parked" message is sent.
+Bonus points are awarded even if the buggy is still moving, as long as it is inside the parking area when the "PARKED" message is sent.
 
 ---
 

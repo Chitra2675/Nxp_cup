@@ -59,7 +59,7 @@ This project is based on the autopilot project - [CogniPilot](https://cognipilot
 Refer the [CogniPilot AIRY Dev Guide](https://airy.cognipilot.org/) for information about it's various components.
 <br>
 
-This project includes a ROS2 Python package (b3rb_ros_aim_india) that integrates into Cranium as explained further.
+This project includes a ROS2 Python package (b3rb_ros_line_follower) that integrates into Cranium as explained further.
 
 ---
 ## **Autonomous Medical Response CHALLENGE DESCRIPTION**
@@ -288,11 +288,11 @@ Participants are responsible for implementing the logic required to successfully
         * After successfully delivering the third patient, leave the city through the designated Exit.
         * The Exit is located **in front of** the final hospital delivery zone.
         * Navigate and proceed to that parking area.
-        * Once you are inside the parking area, send **Parked** message to the Municipality Server.
+        * Once you are inside the parking area, send **PARKED** message to the Municipality Server.
         * The municipality server will wait only for **1-minute** for this parked message.
     * **Bonus Points:**
         * If the Buggy is inside the parking area and
-        * the **Parked** massage is received within a minute of entering parking,
+        * the **PARKED** massage is received within a minute of entering parking,
         * Bonus points will be awarded.
     * **Hint:**
         * Even if the Buggy doesn't stop completely but the buggy is inside parking while sending parked message, it is a **Successful parking.**
