@@ -1,8 +1,25 @@
 # NXP India CUP 2026: Autonomous Medical Response
 
-## <span style="background-color: #FFFF00">INTRODUCTION [TO UPDATE THE FILE]</span>
-The NXP Cup 2026 – Autonomous Medical Response Challenge places participants in a realistic smart-city simulation where the NXP rover acts as an autonomous emergency response vehicle. Participants must develop a complete autonomous solution capable of navigating city roads, interpreting traffic guidance signs, identifying patients, communicating with municipal services, and delivering patients to their assigned hospitals.
-The simulated city contains multiple intersections, buildings, road signs, obstacles, patient locations, hospitals, and decoy facilities. Using onboard sensors and perception algorithms, participants must autonomously travel through the city, locate patient buildings, scan QR codes, obtain hospital assignments from the Municipality Server, and safely transport patients to the correct destinations.
+![NXP CUP](Images/NXPCUP.png)
+
+## 📒 Index
+* [INTRODUCTION](#introduction)
+    * [HARDWARE](#hardware)
+    * [SOFTWARE](#software-update)
+* [Autonomous Medical Response CHALLENGE DESCRIPTION](#autonomous-medical-response-challenge-description)
+    * [SIMULATION WORLD](#simulation-world)
+    * [TASK WORKFLOW (PARTICIPANT IMPLEMENTATION)](#task-workflow-participant-implementation)
+    * [EVALUATION AND SCORING](#evaluation-and-scoring)
+* [Setting up NXP CUP INDIA 2026 Software Stack](#setting-up-nxp-cup-india-2026-software-stack)
+    * [PART 1: Setting up Environment](#part-1-setting-up-environment)
+    * [PART 2: Setting up the Competition Stack](#part-2-setting-up-the-competition-stack)
+    * [PART 3: Understanding the Software Stack](#part-3-understanding-the-software-stack)
+    * [PART 4: Build, Modify, Run the Simulation](#part-4-build-modify-run-the-simulation)
+
+
+## **INTRODUCTION**
+The NXP Cup 2026 – Autonomous Medical Response Challenge places participants in a realistic smart-city simulation where the NXP buggy acts as an autonomous emergency response vehicle. Participants must develop a complete autonomous solution capable of navigating the NXP Buggy through city roads, interpreting traffic guidance signs, identifying patients, communicating with municipal services, and delivering patients to their assigned hospitals.
+The simulated city contains lanes, multiple intersections, buildings, road signs, obstacles, patient locations, hospitals, and decoy facilities. Using onboard sensors and perception algorithms, participants must autonomously travel through the city, locate patient buildings, scan QR codes, obtain hospital assignments from the Municipality Server, and safely transport patients to the correct destinations.
 Throughout the challenge, teams will be required to integrate multiple robotics disciplines, including:
 
 * Computer Vision
@@ -22,55 +39,42 @@ Successful scoring in the challenge depends on:
 * avoiding incorrect deliveries
 * and completing all assigned medical response missions within the allotted time.
 
-The ultimate objective is to successfully transport all patients to their assigned hospitals, avoid decoy hospitals and obstacles, exit the city, and autonomously park the rover in the designated parking area, demonstrating a complete end-to-end autonomous medical response workflow. This is a Time-Bound Challenge.
+The ultimate objective is to successfully transport all patients to their assigned hospitals, avoid decoy hospitals and obstacles, exit the city, and autonomously park the buggy in the designated parking area, demonstrating a complete end-to-end autonomous medical response workflow. This is a Time-Bound Challenge.
 
-- The `b3rb_ros_warehouse.py` script serves as a foundational ROS 2 node.
-    * Participants will extend this script to implement the full challenge logic.
+- The `b3rb_ros_line_follower` folder contains scripts that serve as a foundational ROS 2 nodes.
+    * Participants will extend these scripts to implement the full challenge logic.
 
-### <span style="background-color: #CBC3E3">HARDWARE</span>
+### **HARDWARE**
 This software is designed to run on the B3RB and can be tested in compatible Gazebo simulations.
-1.  [NXP MR-B3RB](https://nxp.gitbook.io/mr-b3rb): The target hardware rover.
+1.  [NXP MR-B3RB](https://nxp.gitbook.io/mr-b3rb): The target hardware buggy.
     * Requires a forward-facing camera for QR code detection and potentially building and sign recognition.
     * Relies on sensors (LIDAR, encoders, IMU) for localization & mapping, and navigation (Nav2).
 2.  [Gazebo Simulator](https://gazebosim.org/home): For development and testing in a simulated city environment.
     * The simulation provides a B3RB model with sensors and necessary packages such as NAV2.
 
-### <span style="background-color: #CBC3E3">SOFTWARE [UPDATE]</span>
+### **SOFTWARE**
 This project is based on the autopilot project - [CogniPilot](https://cognipilot.org/) (AIRY Release for B3RB).
 <br>
 Refer the [CogniPilot AIRY Dev Guide](https://airy.cognipilot.org/) for information about it's various components.
 <br>
-- **ROS 2:** Targeted for Humble Hawksbill.
-- **Navigation:** Relies on a fully functional Nav2 stack.
-    * Configuration for Nav2 can be adjusted in `cranium/src/b3rb/b3rb_nav2/config`.
-- **Object Recognition:** An external YOLO model is provided by default to publish the detected objects.
-    * The objects are publish on `/shelf_objects` (`synapse_msgs/WarehouseShelf`) topic.
-- **Python Libraries:**
-    * `rclpy`: ROS 2 client library for Python.
-    * `numpy`: For numerical operations, particularly with map data.
-    * `opencv`: For image processing, crucial for QR code decoding.
-    * `scipy`: For image analysis and spatial distance calculations.
-    * `tkinter`: For the optional progress table GUI.
-- **[Cranium](https://airy.cognipilot.org/cranium/about/)**: A ROS workspace that performs higher level computation for CogniPilot.
-    * On the hardware B3RB, it runs on [NavQPlus](https://nxp.gitbook.io/navqplus/) IMX8MPLUS (Mission Computer).
-    * On the Gazebo Simulator, it runs on the Ubuntu Linux machine.
-    * Relevant packages (detailed later):
-        1. **b3rb_ros_aim_india**
-        2. **synapse_msgs**
-        3. **dream_world**
-        4. **b3rb**
-    * Interaction with the `cerebri` via `/cerebri/out/status` and `/cerebri/in/joy` topics.
-- This project includes a ROS2 Python package (b3rb_ros_aim_india) that integrates into Cranium.
+
+This project includes a ROS2 Python package (b3rb_ros_aim_india) that integrates into Cranium as explained further.
 
 ---
-## <span style="background-color: #FFFF00">Autonomous Medical Response CHALLENGE DESCRIPTION</span>
+## **Autonomous Medical Response CHALLENGE DESCRIPTION**
 
 The primary objective is to maximize points by successfully completing emergency medical response missions across the city in the designated timeline.
 
-### <span style="background-color: #CBC3E3; font-weight:bold">SIMULATION WORLD</span>
+### **SIMULATION WORLD**
 - **City**
     * The challenge takes place in a simulated smart city consisting of roads, intersections, buildings, sign boards, and obstacles.
-    * Participants must autonomously navigate through the city, complete medical response missions, and safely reach assigned destinations.
+    * Participant Buggys must autonomously navigate through the city, complete medical response missions, and safely reach assigned destinations.
+    * The city has a dedicated lane network. A buggy must follow the lane discipline at all times.
+
+- **Lane Discipline**
+    * The city is surrounded by a Lane Network that can be seen in the simulation as White Road bordered with Blank Line.
+    * The black lines detection is to be used the participants to navigate the NXP Buggy within the White Lane.
+
 - **Buildings**
     * The city contains 8 mission-critical buildings, each identified by a QR code.
     * Patient Buildings
@@ -79,12 +83,14 @@ The primary objective is to maximize points by successfully completing emergency
         PATIENT_2
         PATIENT_3
         ```
+        ![Patient Building](Images/Patient.png)
     * Hospital Buildings
         ```
         HOSPITAL_1
         HOSPITAL_2
         HOSPITAL_3
         ```
+        ![Hospital Building](Images/Hospital.png)
     * Fake Hospital Buildings
         ```
         FAKE_HOSPITAL_1
@@ -98,6 +104,17 @@ The primary objective is to maximize points by successfully completing emergency
     * Each sign board provides directions to:
         * Patient Buildings: A, B, C
         * Hospital Buildings: X, Y, Z
+
+        ![Sign Board](Images/SignBoard.png)
+    * Sign to Building Map 
+        | Sign  |   Mapping  |
+        |-------|------------|
+        |   A   |  PATIENT_1 |
+        |   B   |  PATIENT_2 |
+        |   C   |  PATIENT_3 |
+        |   X   | HOSPITAL_1 |
+        |   Y   | HOSPITAL_2 |
+        |   Z   | HOSPITAL_3 |
 
     * Possible directions:
         ```
@@ -116,70 +133,96 @@ The primary objective is to maximize points by successfully completing emergency
         HOSPITAL_2
         ```
 
-- **Mission Flow**
+- **Mission Flow (explained in detail below)**
     ```
-    Enter City
+    Start Buggy
         ↓
-    Find Patient
+    Navigate City
+        ↓
+    Follow Lane Discipline
+        ↓
+    Find Patient 1
         ↓
     Scan QR
         ↓
-    Contact Municipality Server
+    Contact Municipality Server inside Patient 1 Zone
         ↓
-    Receive Hospital Assignment
+    Receive its Hospital Assignment
         ↓
-    Reach Correct Hospital
+    Reach Correct 1st Hospital
+        ↓
+    Acknowledge Server inside Hospital Zone
+        ↓
+    Get 2nd Patient
         ↓
     Repeat for All Patients
         ↓
-    Exit City
+    Drop Last Patient
+        ↓
+    Mission Complete
+        ↓
+    Bonus Mission
+        ↓
+    Exit Lane from Front of Last Hospital
         ↓
     Park Vehicle
+        ↓
+       Stop
     ```
 - **Obstacles**
     * The city contains obstacles placed on and around the roads.
     * Participants must avoid collisions while completing all missions within the allotted time.
 
-### <span style="background-color: #CBC3E3; font-weight:bold">TASK WORKFLOW (PARTICIPANT IMPLEMENTATION)</span>
+    ![Obstacles](Images/Obstacles.png)
+
+### **TASK WORKFLOW (PARTICIPANT IMPLEMENTATION)**
 
 Participants are responsible for implementing the logic required to successfully complete the emergency response mission.
 
 - **1. Enter the City**
     * Start from the designated launch area.
-    * Enter the city road network.
+    * Maneuver the city road network.
     * Begin autonomous operation.
+    * Follow Lane Discipline.
 
-- **2. Locate a Patient Building**
+- **2. Locate 1st Patient Building**
 
-    * Follow road lanes and sign boards.
+    * Follow road lanes and sign boards and reach the 1st Patient.
     * Navigate through intersections.
-    * Reach one of the patient buildings:
+    * In the arena,
+        you have 3 patient buildings:
         ```
         PATIENT_1
         PATIENT_2
         PATIENT_3
         ```
-- **3. Scan Patient QR Code**
 
-    * Position the rover near the patient building.
+- **3. Scan 1st Patient QR Code**
+
+    * Position the buggy near the patient building.
     * Capture and decode the QR code.
     * Extract the patient identifier.
-
-    Example:
+    * Your QR extracts something like this when reading 1st Patient QR:
         ```
-        PATIENT_1
+        {LOC: PATIENT_1}
         ```
 
 - **4. Contact the Municipality Server**
 
-    * Publish the decoded patient ID to the Municipality Server.
-    * Wait for the hospital assignment.
+    * Publish the decoded patient ID to the Municipality Server only when inside Patient Zone.
+    * This publishing of Message to Municipality Server must happen only when you are inside Patient building boundaries as seen in the figure.
 
+        ![Patient Boundary](Images/PatientZone.png)
+
+    * This Patient zone will be invisible to you, but are boundary to boundary mapped to a particular building.
+    * Wait for the hospital assignment. Do not cross the Patient Zone until Hospital is assigned to you.
+    * Walking out of Patient Zone without receiving hospital is a **penalty**.
+    
     Example:
     ```
-    PATIENT_1
-        ↓
-    HOSPITAL_2
+    PATIENT_1   → 
+                  Municipality Server
+    HOSPITAL_2  ← 
     ```
 - **5. Navigate to the Assigned Hospital**
 
@@ -195,8 +238,15 @@ Participants are responsible for implementing the logic required to successfully
     ```
 - **6. Verify Hospital Delivery**
 
-    * Scan the QR code at the destination building.
+    * Position the buggy near the hospital building
+    * Scan the QR code at the hospital building.
     * Verify that the scanned QR matches the hospital assigned by the Municipality Server.
+    * If the Scan matches correctly, send the read Hospital to the server inside the Hospital Zone.
+    * **If the buggy is in the Hospital wall boundaries and the Hospital is correct, you will receive another Patient**.
+
+        ![Hospital Boundary](Images/HospitalZone.png)
+    
+    * If you tried to drop the patient(i.e. send Hospital qr scan to Server) outside Hospital Zone that would give you a **Penalty**.
 
     Example:
     ```
@@ -205,38 +255,49 @@ Participants are responsible for implementing the logic required to successfully
     ```
     ✅ Patient Delivered
     
+    Server Sends another Patient only inside Hospital Zone. If not inside Hospital zone, you will receive INVALID msg.
+    
     Incorrect deliveries, including arrivals at:
     ```
     FAKE_HOSPITAL_1
     FAKE_HOSPITAL_2
     ```
-    will not be considered successful.
+    will be considered as **Penalties**.
 
 - **7. Repeat for Remaining Patients**
 
     Continue the process until all patient missions have been completed.
     ```
-    PATIENT_1
     PATIENT_2
     PATIENT_3
     ```
 
-- **8. Exit the City**
+- **8. Exit the City Lane**
 
-    After all patient deliveries are completed, navigate towards the city exit.
+    After all patient deliveries are completed, navigate towards the city parking.
 
 - **9. Mission Completion**
 
     **Rule**: The challenge is considered complete immediately after the third patient is successfully delivered to the correct hospital.
 
-- **Bonus Task – Exit and Parking**
-    * **Task**: After successfully delivering the third patient, leave the city through the designated Exit Gate.
-    * **Rule:** The Exit Gate is located **in front of** the final hospital delivery zone.
-    * **Action:** Navigate through the Exit Gate and proceed to the parking area.
-    * **Bonus:** Park the rover completely within the designated parking zone to earn bonus points.
-    Successfully exiting the city and parking the rover may award additional bonus points.
+    **Timing**: Each Patient has a fair **lifetime** to reach to the hospital, your buggy must reach the Hospitals on time so that the patient does not die. If the Buggy is too slow, The patient dies and its a **penalty**.
 
-### <span style="background-color: #CBC3E3; font-weight:bold">EVALUATION AND SCORING</span>
+- **Bonus Task – Exit and Parking**
+    * **Task**: 
+        * After successfully delivering the third patient, leave the city through the designated Exit.
+        * The Exit is located **in front of** the final hospital delivery zone.
+        * Navigate and proceed to that parking area.
+        * Once you are inside the parking area, send **Parked** message to the Municipality Server.
+        * The municipality server will wait only for **1-minute** for this parked message.
+    * **Bonus Points:**
+        * If the Buggy is inside the parking area and
+        * the **Parked** massage is received within a minute of entering parking,
+        * Bonus points will be awarded.
+    * **Hint:**
+        * Even if the Buggy doesn't stop completely but the buggy is inside parking while sending parked message, it is a **Successful parking.**
+
+
+### **EVALUATION AND SCORING**
 
 - **Evaluation**
     Participants will communicate with the evaluation framework through the designated ROS topics.
@@ -244,32 +305,30 @@ Participants are responsible for implementing the logic required to successfully
     * Correct patient QR code identification.
     * Successful communication with the Municipality Server.
     * Correct hospital assignment handling.
-    * Successful delivery to the assigned hospital.
+    * Successful delivery to the assigned hospital with-in time.
     * Avoidance of fake hospital deliveries.
     * Completion time.
     * Collision count.
+    * Lane Jump count.
     * Bonus exit and parking completion.
 
     ⚠️ Participants may interact with the Municipality Server multiple times during the mission. However, only successful patient-to-hospital delivery sequences will be considered for scoring.
 
 - **Scoring**
     - **Patient Identification**
-        +5 Points for each correctly decoded patient QR code.
+        +ve Points for each correctly decoded patient QR code.
         ```
         PATIENT_1
         PATIENT_2
         PATIENT_3
         ```
-        Maximum: 15 Points
 
     - **Municipality Communication**
-        +5 Points for each successful patient registration with the Municipality Server.
-        
-        Maximum: 15 Points
+        +ve Points for each successful patient registration with the Municipality Server.
 
     - **Hospital Delivery**
 
-        +10 Points for delivering a patient to the hospital assigned by the Municipality Server.
+        +ve Points for delivering a patient to the hospital assigned by the Municipality Server.
 
         Example:
         ```
@@ -277,33 +336,34 @@ Participants are responsible for implementing the logic required to successfully
             ↓
         HOSPITAL_2
         ```
-        Maximum: 30 Points
 
     - **Mission Completion Bonus**
 
-        +20 Points for successfully completing deliveries for all three patients.
+        +ve Points for successfully completing deliveries for all three patients.
         ```
         PATIENT_1
         PATIENT_2
         PATIENT_3
         ```
-        Maximum: 20 Points
 
     - **Time-Based Ranking**
 
-        +15 Points awarded percentile-wise based on the total mission completion time.
+        +ve Points awarded percentile-wise based on the total mission completion time.
 
         The timer stops immediately after the third patient is successfully delivered to the correct hospital.
-        Maximum: 15 Points
 
     - **Collision Penalty**
 
-        -1 Point for every collision with an obstacle or city infrastructure.
+        -ve Points for every collision with an obstacle or city infrastructure.
+
+    - **Lane Jump Penalty**
+
+        -ve Points for every lane jump i.e. Crossing/Touching the Black Lines each time inside the city infrastructure.
 
 
     - **Incorrect Delivery Penalty**
 
-        -5 Points for delivering a patient to the wrong hospital.
+        -ve Points for delivering a patient to the wrong hospital.
 
         Example:
         ```
@@ -313,7 +373,7 @@ Participants are responsible for implementing the logic required to successfully
 
     - **Fake Hospital Penalty**
 
-        -10 Points for attempting delivery at a fake hospital.
+        -ve Points for attempting delivery at a fake hospital.
         ```
         FAKE_HOSPITAL_1
         FAKE_HOSPITAL_2
@@ -321,134 +381,20 @@ Participants are responsible for implementing the logic required to successfully
 
     - **Bonus Task Scoring**
         After the third patient delivery, participants may attempt the bonus task.
-        * City Exit Bonus
-            +5 Points for successfully exiting the city through the designated Exit Gate.
         * Parking Bonus
-            +10 Points for autonomously parking the rover completely inside the marked parking zone.
-
-        Maximum Bonus: 15 Points
+            +ve Points for autonomously parking the buggy completely inside the marked parking zone.
     
-    - **Maximum Score**
-        ```
-        Correct Patient Identification (3 × 5)       15
-        Correct Hospital Deliveries (3 × 15)         45
-        Mission Completion Bonus                     20
-        Time-Based Ranking Bonus                     15
-        Exit Bonus                                    5
-        Parking Bonus                                10
-        Attendance                                    5(based on no. of sessions attended)
-        -----------------------------------------------
-        Maximum Score                               115
-        ```
-        The winner will be the team with the highest final score. In the event of a tie, the team with the lower mission completion time will be ranked higher. 
+    **The winner will be the team with the highest final score.**
 
+    **In the event of a tie, the team with the lower mission completion time will be ranked higher.**
+
+    > ⚠️ [NOTE]
+    > The exact scoring number is decided by NXP CUP Team and is a discrete autonomous evaluation software.
 
 ---
-## <span style="background-color: #FFFF00">`b3rb_ros_warehouse.py` SCRIPT FUNCTIONALITY OVERVIEW</span>
+## **Setting up NXP CUP INDIA 2026 Software Stack (Installation Guide)**
 
-The `explore` node provides a foundational structure.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">SLAM MAP (INTRODUCTION & UNDERSTANDING)</span>
-- The maps are created using LIDAR, IMU and odometry data.
-- **Coordinate Frames:**
-    1. **Occupancy Grid Frame:** SLAM maps are shared as [nav_msgs/OccupancyGrid](https://docs.ros.org/en/noetic/api/nav_msgs/html/msg/OccupancyGrid.html) which is a 2-D grid.
-        * Each cell represents the probability (expressed as 0-100) of being occupied by an object.
-        * Thus, 0 = free space, 100 = occupied by obstacle; -1 (special case) = unexplored space.
-        * For conversion to world coordinate frame:
-            * Origin: Position of the bottom-left corner of the map in the world frame in meters.
-            * Resolution: Length of each grid cell in meters.
-        * (0, 0) is the bottom-most and left-most cell in the map in the below diagrams.
-    2. **World Coordinate Frame:** Real world coordinates in meters.
-        * Origin: The starting point of the robot.
-- **Types of Occupancy Grid Frames:**
-    1. Static costmap (`/map`): Simple map used for quick decisions​
-    2. Global costmap (`/global_costmap/costmap`): Static costmap + inflation
-        * Inflation: The expanding of obstacles in the costmap to create a buffer zone around them.
-        * It's used because the robot needs to account for its size and potential localization errors.
-    * Axes: The axes for static and global maps are given as follows. (NOTE: x-axis is robot's front direction at starting.) <br>
-    ![](resource/ros2_slam_axes.png)
-
-### <span style="background-color: #FFC0CB; font-weight:bold">NAVIGATION FRAMEWORK (BASE FUNCTIONALITY)</span>
-- **Core Navigation Logic:** The script offers a framework for navigation using a Nav2 action client.
-    * Participants provide a goal pose, and the Nav2 stack manages robot movement.
-    * **Goal:** Consists of x-y coordinates (in world coordinate frame) and yaw (angle about the z-axis).
-        * NOTE: YAW is the angle (between 0 to 2π) from the Positive x-axis in CCW direction.
-    * The Nav2 stack provides feedback on the current goal's status via a feedback callback.
-    * A mechanism to cancel an ongoing navigation goal is included.
-        * This can be used if a goal repeatedly fails or if a more optimal goal is found.
-- **Autonomous Exploration Example (Frontier-Based):**
-    * The script includes a demo frontier-based exploration approach for space exploration.
-        * This demonstrates Nav2 usage and how the warehouse might be initially explored.
-        * Participants have **full autonomy** to modify or replace this exploration logic.
-    * **Frontier Detection (`get_frontiers_for_space_exploration`):**
-        * Identify the boundaries between explored and unknown space.
-        * Select the next exploration goal intelligently, considering proximity to obstacles.
-- **Robot Arming:** Monitors `/cerebri/out/status` and attempts to arm via `/cerebri/in/joy`.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">WAREHOUSE INTERACTION (FRAMEWORK FOR CHALLENGE)</span>
-- **Shelf Object Handling:**
-    * Subscribes to `/shelf_objects` (`synapse_msgs/WarehouseShelf`): `self.shelf_objects_callback`.
-        * **Participants must process `self.shelf_objects_curr` for task-specific object identification.**
-    * Publishes to `/shelf_data` (`synapse_msgs/WarehouseShelf`): `self.publisher_shelf_data`.
-        * **Participants must construct and send messages per challenge rules.**
-- **QR Code Detection (Framework):**
-    * Subscribes to `/camera/image_raw/compressed`: `self.camera_image_callback`.
-        * **Participants must implement QR decoding logic here.**
-    * Participants may store the the last decoded QR string in `self.qr_code_str`.
-    * Optionally publish debug images for QR to `/debug_images/qr_code`.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">GUI - PROGRESS TABLE (OPTIONAL UTILITY)</span>
-- **`WindowProgressTable` Class:** A Tkinter-based GUI.
-- **Functionality:**
-    * Displays a 2 x n grid, mapping to 2 rows and n shelves.
-    * Can be enabled/disabled using the `PROGRESS_TABLE_GUI` flag.
-    * This GUI is provided for participant convenience to track progress. It's use is entirely **optional**.
-    * **Participants choosing to use it should integrate updates to reflect their challenge progress.**
-- It's usage is described in `shelf_objects_callback`.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">KEY SUBSCRIBED TOPICS (RELEVANT TO CHALLENGE)</span>
-- `/pose` ([geometry_msgs/PoseWithCovarianceStamped](https://docs.ros.org/en/noetic/api/geometry_msgs/html/msg/PoseWithCovarianceStamped.html)): Current robot pose.
-- `/global_costmap/costmap` ([nav_msgs/OccupancyGrid](https://docs.ros.org/en/noetic/api/nav_msgs/html/msg/OccupancyGrid.html)): Global costmap from Nav2.
-- `/map` ([nav_msgs/OccupancyGrid](https://docs.ros.org/en/noetic/api/nav_msgs/html/msg/OccupancyGrid.html)): Raw map from SLAM.
-- `/cerebri/out/status` (`synapse_msgs/Status`): Robot's low-level controller status.
-- `/shelf_objects` (`synapse_msgs/WarehouseShelf`): **YOLO model output.**
-- `/camera/image_raw/compressed` ([sensor_msgs/CompressedImage](https://docs.ros.org/en/melodic/api/sensor_msgs/html/msg/CompressedImage.html)): **Image stream.**
-
-### <span style="background-color: #FFC0CB; font-weight:bold">KEY PUBLISHED TOPICS (RELEVANT TO CHALLENGE)</span>
-- `/cerebri/in/joy` ([sensor_msgs/Joy](https://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/Joy.html)): For changing mode and arming the buggy.
-- `/shelf_data` (`synapse_msgs/WarehouseShelf`): **Publish identified objects and QR data.**
-- `/debug_images/qr_code` ([sensor_msgs/CompressedImage](https://docs.ros.org/en/melodic/api/sensor_msgs/html/msg/CompressedImage.html)): Optional for debugging QR processing.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">ACTION CLIENTS</span>
-- **`MapsToPose` Action Client:** Used for sending navigation goals to Nav2 ([nav2_msgs/NavigateToPose](https://github.com/ros-planning/navigation2/blob/humble/nav2_msgs/action/NavigateToPose.action)).
-
----
-## <span style="background-color: #FFFF00">`b3rb_ros_object_recog.py` SCRIPT FUNCTIONALITY OVERVIEW</span>
-
-The `detect` node provides the framework for running the default quantized YOLOv5 object recog model. <br>
-Participants may modify this or implement a different method for object recognition, for improving accuracy.
-
-### <span style="background-color: #FFC0CB; font-weight:bold">KEY SUBSCRIBED TOPICS (Relevant to Challenge)</span>
-- `/camera/image_raw/compressed` ([sensor_msgs/CompressedImage](https://docs.ros.org/en/melodic/api/sensor_msgs/html/msg/CompressedImage.html)): **Image stream.**
-
-### <span style="background-color: #FFC0CB; font-weight:bold">KEY PUBLISHED TOPICS (Relevant to Challenge)</span>
-- `/shelf_objects` (`synapse_msgs/WarehouseShelf`): **Publish identified objects.**
-- `/debug_images/object_recog` ([sensor_msgs/CompressedImage](https://docs.ros.org/en/melodic/api/sensor_msgs/html/msg/CompressedImage.html)): Publish debug image.
-
----
-## <span style="background-color: #FFFF00">`b3rb_ros_model_remove.py` SCRIPT FUNCTIONALITY OVERVIEW</span>
-
-The `remover` node provides a script for removing curtains from shelves per challenge rules. <br>
-Participants are not required to modify this script. This script will be used for evaluation as is.
-
----
-## <span style="background-color: #FFFF00">`b3rb_ros_draw_map.py` SCRIPT FUNCTIONALITY OVERVIEW</span>
-
-The `visualize` node helps visualizing the simple map created by  SLAM on a matplotlib window. <br>
-Participants may utilize this to debug their solution. This script will not be run during evaluation.
-
----
-## <span style="background-color: #FFFF00">EXECUTION STEPS</span>
+Guide to install setup for NXP CUP 2026 CHALLENGE.
 
 **Requirements:**
 1. [Ubuntu 22.04.5](https://releases.ubuntu.com/jammy/) (Fresh installation recommended to prevent any compatibility conflict with current setup)
@@ -481,9 +427,10 @@ rm -rf ~/bin/docs
 rm -rf ~/cognipilot
 ```
 
-### <span style="background-color: #CBC3E3; font-weight:bold">PART 1</span>
+### **PART 1: Setting up Environment**
 
-**Install CogniPilot by executing the following steps (taken from [https://airy.cognipilot.org/getting_started/install/](https://airy.cognipilot.org/getting_started/install/)):**
+**Install CogniPilot by executing the following steps:
+    (these steps are taken from [https://airy.cognipilot.org/getting_started/install/](https://airy.cognipilot.org/getting_started/install/)):**
 1. NOTE:
     1. docker method is **not** recommended
     2. SSH and GPG keys are **not** required
@@ -512,57 +459,27 @@ rm -rf ~/cognipilot
     ```
     source ~/.bashrc
     ```
-5. Build Foxglove.
+5. Build Foxglove Studio. Understand from Internet what it is, you'll learn something amazing!!
     ```
     build_foxglove
     ```
     1. select `n` (No) when asked for 'ssh keys'
     2. select `1` (airy) when asked for 'release'
 
-### <span style="background-color: #CBC3E3; font-weight:bold">PART 2[TO UPDATE]</span>
+### **PART 2: Setting up the Competition Stack**
 
-Open a terminal in a temp location and follow the following steps to setup **[NXP_AIM_INDIA_2025](https://github.com/NXPHoverGames/NXP_AIM_INDIA_2025)** and **YOLOv5**.
-```
-git clone https://github.com/NXPHoverGames/NXP_AIM_INDIA_2025 NXP_AIM_INDIA_2025
-mv NXP_AIM_INDIA_2025 ~/cognipilot/cranium/src/
-
-git clone https://github.com/NXPHoverGames/B3RB_YOLO_OBJECT_RECOG.git
-cd B3RB_YOLO_OBJECT_RECOG
-git checkout nxp_aim_india_2025
-
-mv resource/coco.yaml ~/cognipilot/cranium/src/NXP_AIM_INDIA_2025/resource/
-mv resource/yolov5n-int8.tflite ~/cognipilot/cranium/src/NXP_AIM_INDIA_2025/resource/
-mv b3rb_ros_aim_india/b3rb_ros_object_recog.py ~/cognipilot/cranium/src/NXP_AIM_INDIA_2025/b3rb_ros_aim_india/
-
-cd ..
-rm -rf B3RB_YOLO_OBJECT_RECOG
-```
-
- <span style="background-color:rgb(255, 238, 0); font-weight:bold">Then in "~/cognipilot/cranium/src/NXP_AIM_INDIA_2025/setup.py" uncomment lines 12, 13 and 28.</span>
-
-Perform the following steps to setup the environment and build cranium for NXP_AIM_INDIA_2025:
+Perform the following steps to setup the environment and build cranium for NXP CUP INDIA 2026:
 
 1.  **Setup Environment:**
-    ```bash
-    cd ~/cognipilot/cranium/src/
-    rm -rf dream_world
-    rm -rf synapse_msgs
-    rm -rf b3rb_simulator
-
-    cd ~/cognipilot/cranium/src/
-    git clone https://github.com/NXPHoverGames/dream_world.git
-    cd ~/cognipilot/cranium/src/dream_world
-    git checkout nxp_aim_india_2025
-
-    cd ~/cognipilot/cranium/src/
-    git clone https://github.com/NXPHoverGames/synapse_msgs.git
-    cd ~/cognipilot/cranium/src/synapse_msgs
-    git checkout nxp_aim_india_2025
-
-    cd ~/cognipilot/cranium/src/
-    git clone https://github.com/NXPHoverGames/b3rb_simulator.git
-    cd ~/cognipilot/cranium/src/b3rb_simulator
-    git checkout nxp_aim_india_2025
+    > **DO THESE STEPS VERY CAREFULLY AND RESPONSIBLY !!!**
+    ```
+    cd ~/cognipilot/cranium/
+    rm -rf src install log build
+    ``` 
+    
+    ```
+    git clone https://github.com/NXP-Robotics/NXP_CUP_INDIA_2026.git
+    mv NXP_CUP_INDIA_2026/src .
     ```
 
 2.  **Install Dependencies:** (The following modules are allowed for use in your solution.)
@@ -582,160 +499,177 @@ Perform the following steps to setup the environment and build cranium for NXP_A
         tflite-runtime==2.14.0
     ```
 
-### <span style="background-color: #CBC3E3; font-weight:bold">PART 3</span>
+### **PART 3: Understanding the Software Stack**
+> Advisory note: First read and understand it, be not in a hurry to edit the tech stack.
 
-There are four simulation world environments which you can load for your testing.
-* nxp_aim_india_2025/warehouse_1
-* nxp_aim_india_2025/warehouse_2
-* nxp_aim_india_2025/warehouse_3
-* nxp_aim_india_2025/warehouse_4
+3. **Understanding Folders**
 
-The following world specific parameters are passed from the command line while running "ros2 launch":
-* `warehouse_id`
-* `initial_angle`
-* `shelf_count`
+    * **src folder**: The ~/cognipilot/cranium/src folder contains 12 folders out of which 2 folders are of your main interest.
+        * b3rb_ros_line_follower
+        * dream_world
+        ![2 Folders](Images/2folders.png)
+
+    * **Models**
+        * Every 3d model that you need to spawn is already available in the **src/dream_world** folder.
+        * Inside **src/dream_world/dream_world/models**, you will find many ready made models.
+        ![Models Folder](Images/ModelsFolder.png)
+        * Try opening **Raceway_1.sdf** in **src/dream_world/dream_world/worlds**
+        * We add/subtract models to be spawned in Simulation from this file.
+        * Initial lines in this file are the environment settings and then start Models.
+        * Only models that are present in **src/dream_world/dream_world/worlds** directory can be included into the simulation by this method.
+        * Example:
+          ```
+          <include>
+            <uri>models://Raceway_1</uri>
+            <name>track</name>
+            <pose>0 2.245 0 0 0 1.55</pose>
+          </include>
+          ```
+          * **include**: This tag will contain information about one unique instance of any model spawned in simulation. Make sure to always have end tag as well, when using this ("include").
+          
+          * **uri**: This tag will contain name/type of the model to be spawned into the simulation. This represents the name of the desired model that has to be spawned and is stored either in ~/cognipilot/cranium/src/dream_world/dream_world/models* .
+          
+          Please make sure the name of the model passed to the "URI tag" parameter must be case sensitive as well as present in the mentioned folder.
+          
+          * **name**: It is a custom unique identifier given to each entity which allows Gazebo to keep track of each model spawned into the simulation.
+            Use unique string values for the "name" parameter for each obstacle to be added. As same value will not spawn the obstacles into simulation
+          
+          * **pose**: This parameter defines the position and orientation of models in simulation. rIt is represented by "x y z R P Y" where: x is x-coordinate, y is y-coordinate, z is z-coordinate, R is roll, P is pitch and Y is yaw.
+
+    * **B3RB ROS LINE FOLLOWER**
+        > Advisory note: **~/congnipilot/cranium/src/b3rb_ros_line_follower** is the only folder that the participants have to modify an submit for the Regional Finale
+
+        ![B3RB Folder](Images/b3rbfolder.png)
+
+        To understand this package deeply, refer to [B3RB ROS 2 Package](B3RB_ROS2_Package.md)
+
+
+### **PART 4: Build, Modify, Run the Simulation**
+
+There is a simulation world environment **Raceway_1** which you can load for your testing.
 
 Perform the following steps:
 
-3.  **Build Workspace and Launch Gazebo Simulation:**
+4.  **Build Workspace and Launch Gazebo Simulation:**
 
-    NOTE: Whenever you make a change, `colcon build` and `source setup.bash` is required as follows. <br>
-    ⚠️ NOTE: Execute only one of the "ros2 launch" commands, depending upon which world you wish to load.
+    NOTE: Whenever you make a change, `colcon build` and `source setup.bash` is required as follows.
 
-    ```bash
-    cd ~/cognipilot/cranium/
-    colcon build
-    source ~/cognipilot/cranium/install/setup.bash
+    * Open a **new** terminal and follow the following steps for building Cranium and running Gazebo Simulation.
+        ```
+        cd ~/cognipilot/cranium/
+        colcon build
+        ```
 
-    # execute one of the following depending on which world you wish to load.
-    ros2 launch b3rb_gz_bringup sil.launch.py world:=nxp_aim_india_2025/warehouse_1 warehouse_id:=1 shelf_count:=2 initial_angle:=135.0 x:=0.0 y:=0.0 yaw:=0.0
-    ros2 launch b3rb_gz_bringup sil.launch.py world:=nxp_aim_india_2025/warehouse_2 warehouse_id:=2 shelf_count:=4 initial_angle:=040.6 x:=0.0 y:=-7.0 yaw:=1.57
-    ros2 launch b3rb_gz_bringup sil.launch.py world:=nxp_aim_india_2025/warehouse_3 warehouse_id:=3 shelf_count:=3 initial_angle:=045.0 x:=5.0 y:=-2.0 yaw:=3.14
-    ros2 launch b3rb_gz_bringup sil.launch.py world:=nxp_aim_india_2025/warehouse_4 warehouse_id:=4 shelf_count:=5 initial_angle:=045.0 x:=5.0 y:=-2.0 yaw:=3.14
+        It will start building 16 packages. Once building is complete, start **fresh** terminal.
+        In case you face any error in colcon build, this means **src** folder is not right, follow from **Setup Environment** again.
+        ```
+        source ~/cognipilot/cranium/install/setup.bash
+        ros2 launch b3rb_gz_bringup sil.launch.py world:=Raceway_1
+        ```
+        Running this will launch the gazebo simulation and Xterm window as follows:
+        ![Gazebo View](Images/GazeboView.png)
+
+        > 💡 **Tip:** Use mouse with your system for better scroll experience in Gazebo.
+
+        > 📢❗🚨 **NOTE** The empty world that you are seeing is a sample world, the Regional Finale world is different but has the same logic to win🎯.
+
+    **Run individual nodes in separate fresh terminals**:
+    *   **Lane Vector Extractor**:
+        ```
+        source ~/cognipilot/cranium/install/setup.bash
+        ros2 run b3rb_ros_line_follower vectors
+        ```
+    *   **Sign Board Classifier**:
+        ```
+        source ~/cognipilot/cranium/install/setup.bash
+        ros2 run b3rb_ros_line_follower detect
+        ```
+
+        > In case you face any Tensorflow Error:
+        > ```
+        > sudo pip install tensorflow
+        > ```
+        > Check if installed:
+        > ```pip show tensorflow
+        > This show the tensorflow version
+
+    *   **QR Scanner Node**:
+        ```
+        source ~/cognipilot/cranium/install/setup.bash
+        ros2 run b3rb_ros_line_follower qr_detect
+        ```
+    
+    *   **Runner Node**.
+        ```
+        source ~/cognipilot/cranium/install/setup.bash
+        ros2 run b3rb_ros_line_follower runner
+        ```
+
+    *Running the above 4 commands should make the buggy move autonomously now in simulation.*
+
+    If on execution of any _ros2 run b3rb_ros_line_follower gives error like below, it means that sourcing of setup.bash was unsuccessful
+    ![Sourcing Error](Images/SourcingError.png)
+
+5. **Updating the Code Base for NXP CUP INDIA 2026 Challenge:**
+
+    > **💡Tip**: First build the empty sample world successfully.
+
+    * **Adding Obstacles**:
+        * The folder you received spawns an empty sample track.
+        * Uncomment the models as explained above one-by-one in **Raceway_1.sdf** file to spawn them for your circuit during your testing.
+        * Build and Load the sample world again as mentioned here: [Build Workspace](#part-4-build-modify-run-the-simulation)
+        * This loads your world with obstacles.
+    
+    * **B3RB ROS LINE FOLLOWER**
+        * This is the only folder that the participants have to modify and submit for the Regional Finale
+        * Update your code in this folder only and run for iterations.
+        * Complete your logic inside this to complete the challenge.
+        * Build and Load the sample world again as mentioned here: [Build Workspace](#part-4-build-modify-run-the-simulation)
+
+6. **Communication with the Municipal Server**
+
+    Refer to [Server Communication Guide](ServerCommunicationGuide.md)
+
+7.  **NXP CUP Debugging Tool**
+
+    NXP provides a great debug tool. Read here: [NXP CUP Debugging Tool](NXP_CUP_DebuggingTool.md)
+
+## **SUBMISSION RULES:**
+
+1. **NXP laptop** will be used for evaluation. No additional package installation will be allowed.
+2. The code should work with the default setup created at the time of installing CogniPilot Airy release.
+3. Additional python modules may be permitted only after written consent from the NXP CUP TEAM.
+    - Contact NXP CUP Technical Team if you wish to use a python module not in the following list:
+        - torch==2.3.0
+        - torchvision==0.18.0
+        - numpy==1.26.4
+        - opencv-python==4.11.0.86
+        - scipy==1.15.1,
+        - scikit-learn==1.5.2
+        - tk==0.1.0
+        - pyzbar==0.1.9
+        - matplotlib==3.5.1
+        - pyyaml==6.0.2
+        - tflite-runtime==2.14.0.
+
+4. Participants need to submit 'b3rb_ros_line_follower' folder only:
+
+    Create a new folder with name: NXP_CUP26_<your_team_id>:
+    ```
+        If you team id is: '3124'
+        the folder name is **NXP_CUP26_3124**.
+        Place the 'b3rb_ros_line_follower' folder inside it.
     ```
 
-    <span style="background-color:rgb(255, 238, 0); font-weight:bold">This will open two new windows - "cerebri terminal" (never use this shell) and "Gazebo Sim".</span>
-
-    ⚠️ NOTE: If you get a simulation launch create error (like the following), then cancel the above command & run `ros2 launch` again.
-    ![](resource/sim_create_error.png)
-
-
-### <span style="background-color: #CBC3E3; font-weight:bold">PART 4</span>
-
-(OPTIONAL: For visualizing slam map.)
-
-4.  **Open a new terminal and follow the following steps for running b3rb_ros_draw_map:**
-    ```bash
-    source ~/cognipilot/cranium/install/setup.bash
-    ros2 run b3rb_ros_aim_india visualize
+    Zip this folder and its name should be: 
+    ```
+        NXP_CUP26_<your_team_id>.zip
     ```
 
-(OPTIONAL: For debugging with Foxglove.)
+    This is the final submission file. The place to upload this file will be communicated via **Teams Channel**. 
 
-5. Clone and checkout `electrode` from NXPHoverGames using the following steps:
-    ```
-    cd ~/cognipilot/electrode/src/
-    rm -rf electrode
-    git clone https://github.com/NXPHoverGames/electrode.git
-    cd electrode
-    git checkout nxp_aim_india_2025
-    ```
-    This commit appends the following in the **default_value** of **topic_whitelist** in **[electrode.launch.py](https://github.com/CogniPilot/electrode/blob/airy/launch/electrode.launch.py)**:
-    1. "/debug_images/object_recog"
-    2. "/debug_images/qr_code"
+5. NXP Team **may** ask for the Video Submissions too if the number of participants exceed the threshold.
+    
+    The process of submitting the video will be communicated via **Teams channel**.
 
-6. **Open a new terminal and follow the following steps for building and running Foxglove.**
-    ```bash
-    cd ~/cognipilot/electrode/
-    colcon build
-    source ~/cognipilot/electrode/install/setup.bash
-    ros2 launch electrode electrode.launch.py sim:=True
-    ```
-
-    - Sign in with your personal account (you may need to create an account on Foxglove); <br>
-    - Then connect to simulation by clicking on "Open connection", then set WebSocket URL as "ws://localhost:8765". <br>
-    - Click on 'layout', click on 'import from file', select "~/cognipilot/electrode/src/electrode/foxglove_layouts/b3rb.json". <br>
-    ![](resource/foxglove_layout.png)
-
-    ⚠️ NOTE: If `/cerebri/out/status` are in **Waiting** state (like in the following), then cancel all commands and restart from step 3.
-    ![](resource/waiting_state_error.png)
-
-## <span style="background-color: #FFFF00">ADVANCED STEPS FOR FASTER DEVELOPMENT (OPTIONAL)</span>
-
-You may create a bash file (unique for each world) for faster execution. For example for warehouse_1:
-```
-cd ~/cognipilot/cranium/
-colcon build
-source install/setup.bash
-ros2 launch b3rb_gz_bringup sil.launch.py world:=nxp_aim_india_2025/warehouse_1 warehouse_id:=1 shelf_count:=2 initial_angle:=135.0 x:=0.0 y:=0.0 yaw:=0.0
-```
-
-## <span style="background-color: #FFFF00">`cranium/src/b3rb/b3rb_nav2` PACKAGE FUNCTIONALITY OVERVIEW</span>
-Participants are allowed to modify the following files in the NAV2 package in CRANIUM to enhance navigation. <br>
-Participants are encouraged to tune the configuration parameters based on their algorithm & performance needs. <br>
-
-1. **~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav_to_pose_bt.xml**
-    - It defines the behavior tree for navigating to a single goal pose.
-2. **~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav_through_poses_bt.xml**
-    - It defines the behavior tree for navigating through multiple waypoints.
-3. **~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav2.yaml**
-    - Central configuration for the Nav2 (ROS2 navigation) stack.
-    - Key parameters: obstacle inflation, goal tolerances, recovery behaviors, global and local parameters.
-4. **~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/slam.yaml**
-    - It defines the configuration parameters for slam_toolbox (Simultaneous Localization and Mapping).
-    - Key parameters: map resolution, update intervals, scan throttling, loop closure settings.
-
-⚠️ NOTE: Modifying parameters involves tradeoff between the following:
-- Mapping accuracy
-- CPU usage
-- Responsiveness
-- Robustness.
-- Stability
-
-## <span style="background-color: #FFFF00">PARTICIPANT IMPLEMENTATION FOCUS</span>
-Participants should modify and extend `b3rb_ros_warehouse.py` and `b3rb_ros_object_recog.py` to:
--   **Shelf Detection:** Implement robust logic for finding shelf locations (map-based or vision-based).
-    - map based: `global_map_callback` or `simple_map_callback`
-    - image based (taken from front of the robot): `camera_image_callback`
--   **Targeted Navigation:** Develop functions for precise navigation to:
-    * The front/back of shelves for object viewing.
-    * QR code locations on either side of shelves.
--   **Navigation Recovery:** The Nav2 action client may collide the robot with obstacles if not tuned correctly.
-    * ⚠️ **Participants are strongly advised to implement a recovery logic** by cancelling current goal.
-    * Then, move robot away from the obstacle using manual mode after analyzing the map.
--   **State Management:** Track the status of n shelves (IDs, objects, QR codes, curtain revealed or not).
--   **Object Data Processing:** In `shelf_objects_callback`, associate identified objects with shelves.
--   **QR Code Decoding:** Implement reliable QR code detection/decoding in `camera_image_callback`.
--   **Challenge Strategy:** Design the overall approach:
-    * Explore world using heuristic.
-    * Visiting shelves in sequence.
-    * Error handling and recovery.
--   **Data Publication Logic:** Create message and publish to `/shelf_data` per scoring rules.
--   **GUI Integration (Optional):** If using `WindowProgressTable`, update it to reflect challenge state.
--   NOTE: As a fallback, participants may discard the heuristic and explore randomly to locate shelves.
-    * Then, visit all shelves in order and perform the necessary tasks.
-
-## <span style="background-color: #FFFF00">AREAS FOR DEVELOPMENT IN THE WAREHOUSE SCRIPT</span>
-- **Shelf Detection:** The base script lacks specific shelf detection logic; this is a key participant task.
-- **Navigating to Shelves**: Position the robot such that shelf objects are clearly visible by front camera.
-- **QR Code Decoding:** `camera_image_callback` is a placeholder requiring implementation.
-- **Comprehensive State Machine:** A robust state machine for challenge workflow management.
-- **Object Recognition:** Improve the default object recognition module provided, if needed.
-    * Areas of improvement for object recognition: Accuracy, inference time, output classes.
-
-## <span style="background-color: #FFFF00">SUBMISSION RULES</span>
-⚠️ **NOTE: NXP laptop will be used for evaluation. No additional package installation will be allowed.** <br>
-**The code should work with the default setup created at the time of installing CogniPilot Airy release.** <br> <br>
-**NOTE: Additional python modules may be permitted only after written consent from the AIM TEAM.**
-- Contact NXP AIM Technical Team if you wish to use a python module not in the following list:
-    - torch==2.3.0, torchvision==0.18.0, numpy==1.26.4, opencv-python==4.11.0.86, scipy==1.15.1,
-    - scikit-learn==1.5.2, tk==0.1.0, pyzbar==0.1.9, matplotlib==3.5.1, pyyaml==6.0.2, tflite-runtime==2.14.0.
-
-**Participants will submit the following for the final evaluation:**
-1. b3rb_ros_aim_india
-    - NOTE: Unset PROGRESS_TABLE_GUI at b3rb_ros_warehouse.py:56
-2. b3rb: The following files only.
-    - ~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav_to_pose_bt.xml
-    - ~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav_through_poses_bt.xml
-    - ~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/nav2.yaml
-    - ~/cognipilot/cranium/src/b3rb/b3rb_nav2/config/slam.yaml
+6. The submission of folder and video will communicated via the **Teams Channel**.
