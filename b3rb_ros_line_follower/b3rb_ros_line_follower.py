@@ -124,10 +124,22 @@ class LineFollower(Node):
         self.publisher_joy.publish(msg)
 
     def rover_move_manual_mode(self, speed, turn):
-        """Helper to immediately set control speed and steering angle."""
-        self.target_speed = float(max(min(speed, SPEED_MAX), -SPEED_MAX))
-        self.target_turn = float(max(min(turn, TURN_MAX), -TURN_MAX))
+        """Helper to immediately set control speed and steering angle.
 
+        Includes a rate limiter on turn: no matter how large the computed
+        correction is, the actual steering value can only change by a
+        bounded amount per call. This prevents sudden full-reversal
+        oscillation (e.g. hard-left one frame, hard-right the next) when
+        upstream vector detection is noisy/ambiguous, such as at junctions.
+        """
+        MAX_TURN_STEP = 0.15  # max change in turn allowed per callback
+
+        requested_turn = float(max(min(turn, TURN_MAX), -TURN_MAX))
+        turn_delta = requested_turn - self.target_turn
+        turn_delta = max(min(turn_delta, MAX_TURN_STEP), -MAX_TURN_STEP)
+
+        self.target_speed = float(max(min(speed, SPEED_MAX), -SPEED_MAX))
+        self.target_turn = self.target_turn + turn_delta
     # ------------------ Callback Implementations ------------------
 
     def edge_vectors_callback(self, message):
@@ -146,26 +158,36 @@ class LineFollower(Node):
 
         # Proportional gain: how aggressively we react to centering error.
         # Tune this later once we see real behavior on straight/curved sections.
-        KP = 1.2
+        KP = 1.0
 
         if message.vector_count == 2:
             # Both lane borders visible: steer to center the midpoint of
             # their closest (bottom) points relative to image center.
-            left_x = message.vector_1[1].x
-            right_x = message.vector_2[1].x
+            # Using index [0] (the FAR point of the vector, further from the
+            # buggy) instead of [1] (near point) gives us a "look-ahead"
+            # preview of where the lane is heading, so we start turning
+            # earlier and more smoothly into curves/junctions.
+            left_x = message.vector_1[0].x
+            right_x = message.vector_2[0].x
             midpoint_x = (left_x + right_x) / 2.0
 
             error = (half_width - midpoint_x) / half_width  # normalized: [-1, 1]
-            self.rover_move_manual_mode(self.target_speed, KP * error)
+            new_turn = KP * error
+            smoothed_turn = 0.7 * self.target_turn + 0.3 * new_turn
+            self.rover_move_manual_mode(self.target_speed, smoothed_turn)
 
         elif message.vector_count == 1:
             # Only one border visible: steer away from it to keep distance,
             # since we can't see where the opposite border actually is.
             visible_x = message.vector_1[1].x
-            error = (half_width - visible_x) / half_width
 
-            # Same formula works here too: a line left-of-center produces a
-            # positive error (steer right/away from it), and vice versa.
+            # NOTE: sign is intentionally the OPPOSITE of the 2-vector case.
+            # If visible_x < half_width (line is on the left), we want a
+            # NEGATIVE turn (steer right, away from it).
+            # If visible_x > half_width (line is on the right), we want a
+            # POSITIVE turn (steer left, away from it).
+            error = (visible_x - half_width) / half_width
+
             self.rover_move_manual_mode(self.target_speed, KP * error * 0.5)
 
         else:

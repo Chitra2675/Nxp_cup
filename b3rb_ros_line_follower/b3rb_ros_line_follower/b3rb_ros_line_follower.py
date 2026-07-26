@@ -162,12 +162,15 @@ class LineFollower(Node):
             # Only one border visible: steer away from it to keep distance,
             # since we can't see where the opposite border actually is.
             visible_x = message.vector_1[1].x
-            error = (half_width - visible_x) / half_width
 
-            # Same formula works here too: a line left-of-center produces a
-            # positive error (steer right/away from it), and vice versa.
+            # NOTE: sign is intentionally the OPPOSITE of the 2-vector case.
+            # If visible_x < half_width (line is on the left), we want a
+            # NEGATIVE turn (steer right, away from it).
+            # If visible_x > half_width (line is on the right), we want a
+            # POSITIVE turn (steer left, away from it).
+            error = (visible_x - half_width) / half_width
+
             self.rover_move_manual_mode(self.target_speed, KP * error * 0.5)
-
         else:
             # No lines detected this frame: hold current heading, don't
             # panic-steer off a single bad frame.
