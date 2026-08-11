@@ -232,6 +232,8 @@ APPROACH_MAX_SEC = 20.0      # hard cap; must exceed ADVANCE_M / SPEED_APPROACH
 APPROACH_STALL_SEC = 1.5     # secondary trigger: closing has stopped improving
 APPROACH_PROGRESS_M = 0.05   # closing less than this does not count as progress
 APPROACH_ARC_DEG = 75        # arc searched for the building we are pulling up to
+RECEDING_MARGIN = 0.15        # meters: near increasing this much past its best = passed the building
+MIN_ARRIVAL_ADVANCE_M = 0.4   # sanity floor so this can't trigger on startup noise
 # Once we commit to a building we do NOT abandon it the moment the code leaves
 # frame. At cruise the buggy gets only a short burst of decodes as it comes
 # level with a board; if losing freshness cancelled the approach it would
@@ -1424,7 +1426,10 @@ class LineFollower(Node):
             self.target_building = upper
             self.get_logger().info(f"[MISSION] assigned -> {upper}")
             self.pending_turn = None
-            self.latch_turn_for_target()    # we may already hold a useful sign
+            self.approach_since = None
+            self.approach_target = None
+            self.arrival_building = None
+            self.latch_turn_for_target()
             self.set_state(State.SEEK_HOSPITAL)
             return
 
@@ -1670,8 +1675,10 @@ class LineFollower(Node):
             # up. Past halfway, the dropout is the geometry working as
             # expected (the board has gone abeam, out of the camera), so only
             # the hard time cap can abort; the rest is odometry.
+            still_progressing = (time.time() - self.approach_best_time) < APPROACH_STALL_SEC
             early_loss = (since_qr > APPROACH_QR_GRACE_SEC
-                          and advanced < 0.5 * APPROACH_ADVANCE_M)
+                          and advanced < 0.5 * APPROACH_ADVANCE_M
+                          and not still_progressing)
             if early_loss or held > APPROACH_MAX_SEC:
                 self.get_logger().warn(
                     f"[APPROACH] abandoning {committed} "
@@ -1732,9 +1739,12 @@ class LineFollower(Node):
                 # The stall trigger stays as a genuine "we are blocked and
                 # will not get further" backstop, and only past halfway so an
                 # early stall cannot stop us short of the zone.
+                receding = (self.nearest_dist > self.approach_best + RECEDING_MARGIN
+                            and advanced > MIN_ARRIVAL_ADVANCE_M)
                 arrived = (advanced >= APPROACH_ADVANCE_M
                            or (stalled > APPROACH_STALL_SEC
-                               and advanced > 0.5 * APPROACH_ADVANCE_M))
+                               and advanced > 0.5 * APPROACH_ADVANCE_M)
+                           or receding)
 
                 if arrived:
                     self.get_logger().info(
