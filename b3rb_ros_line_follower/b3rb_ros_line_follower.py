@@ -847,7 +847,7 @@ class LineFollower(Node):
             # --- V-fork: the two boundaries are two different branches ----
             if ratio > FORK_WIDTH_RATIO:
                 self.fork_until = now + FORK_HOLD_SEC
-            in_fork = now < self.fork_until
+            in_fork = now < self.fork_until and self.front_dist >= OBSTACLE_SLOW_DIST
 
             if in_fork:
                 want = self.pending_turn if self.pending_turn in (
