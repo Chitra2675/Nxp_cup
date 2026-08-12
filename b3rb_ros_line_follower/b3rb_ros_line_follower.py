@@ -227,7 +227,7 @@ QR_FRESH_SEC = 1.5           # a QR read older than this is not trusted
 # the frontage on every measured run. We record the pose at first decode and
 # drive until we have covered APPROACH_ADVANCE_M.
 APPROACH_ADVANCE_M = 3.7     # metres of travel from first decode to arrival
-APPROACH_MAX_SEC = 30.0      # hard cap; must exceed ADVANCE_M / SPEED_APPROACH
+APPROACH_MAX_SEC = 20.0      # hard cap; must exceed ADVANCE_M / SPEED_APPROACH
                              # or the cap fires before arrival can
 APPROACH_STALL_SEC = 1.5     # secondary trigger: closing has stopped improving
 APPROACH_PROGRESS_M = 0.05   # closing less than this does not count as progress
@@ -847,7 +847,7 @@ class LineFollower(Node):
             # --- V-fork: the two boundaries are two different branches ----
             if ratio > FORK_WIDTH_RATIO:
                 self.fork_until = now + FORK_HOLD_SEC
-            in_fork = now < self.fork_until and self.front_dist >= OBSTACLE_SLOW_DIST
+            in_fork = now < self.fork_until
 
             if in_fork:
                 want = self.pending_turn if self.pending_turn in (
