@@ -199,7 +199,7 @@ ZONE_ARC_DEG = 85            # wide arc used ONLY for "am I beside a building"
 # of margin, which also covers the lateral drift of a steering correction.
 CORRIDOR_HALF_WIDTH = 0.55   # metres; vehicle half-width plus safety margin
 CORRIDOR_ARC_DEG = 80        # only returns within this bearing can be ahead
-DEBUG_LIDAR = False          # print clearances at 2 Hz for tuning
+DEBUG_LIDAR = True          # print clearances at 2 Hz for tuning
 
 # --- zone estimation (penalty-critical: keep conservative) ---
 # --- zone estimation ---------------------------------------------------------
@@ -274,33 +274,41 @@ SRC_BUGGY = 1
 DEST_SERVER = 2
 ID_BUGGY = 1
 
-# --- stuck detection and recovery ---------------------------------------------
-# The buggy has no reverse in its normal control path: the avoidance layer
-# steers away from obstacles but still commands forward speed. Nosed into a
-# corner that is a trap - it grinds against the wall indefinitely. These
-# constants drive an explicit escape manoeuvre.
-STUCK_SPEED_MIN = 0.10       # we believe we are driving if commanded above this
-STUCK_MOVE_MIN = 0.25        # metres of travel expected within the window
-STUCK_WINDOW_SEC = 3.0       # no progress for this long => stuck
-REVERSE_SPEED = -0.35        # backing-out speed
-REVERSE_SEC = 2.0            # how long to reverse
-REVERSE_TURN = 0.55          # steer while reversing, to change approach angle
-RECOVERY_COOLDOWN_SEC = 4.0  # ignore stuck detection just after a recovery
-# Reversing alone was not enough: the buggy backed off a tree and then drove
-# straight into it again, because nothing changed its heading. After backing
-# out we therefore hold a steer away from the obstacle for a moment before
-# normal control resumes.
-ESCAPE_SEC = 1.2             # forced turn-away after reversing
-ESCAPE_TURN = 0.70
-ESCAPE_SPEED = 0.22
-# Odometry here is wheel-derived, so a buggy grinding against a pole with its
-# wheels turning reports forward motion it is not making - which blinds the
-# distance-based detector to the exact case it exists for. This second detector
-# trusts only the LiDAR: if something sits in the collision corridor at contact
-# range while we are commanding forward motion, we are stuck, whatever the
-# odometry claims.
-STUCK_CONTACT_DIST = 0.45    # corridor range that means we are against something
-STUCK_CONTACT_SEC = 2.0      # held for this long while driving => stuck
+# --- LiDAR-driven stuck detection and recovery --------------------------------
+# Recovery is deliberately driven by LiDAR, not by wheel odometry. The failure
+# we are targeting is the buggy entering the hospital/cone corridor and then
+# steering toward the cones while trying to back out.
+#
+# IMPORTANT: REVERSE_TURN is intentionally zero in the first recovery phase.
+# The safest first action is to create longitudinal clearance from the obstacle
+# before choosing an escape direction. A large steering command while reversing
+# can make the rear trajectory bend into the cone line.
+STUCK_SPEED_MIN = 0.10
+STUCK_CONTACT_DIST = 0.50    # front LiDAR distance considered a contact/stuck range
+STUCK_CONTACT_SEC = 1.50     # contact must persist before recovery is entered
+LIDAR_STALE_SEC = 0.35       # never initiate/continue recovery from stale scan data
+RECOVERY_COOLDOWN_SEC = 4.0
+
+# Reverse farther than the old fixed 2 s manoeuvre. The primary exit condition
+# is LiDAR clearance, while the time limit is only a safety ceiling.
+REVERSE_SPEED = -0.35
+RECOVERY_REVERSE_TARGET = 1.30   # metres of FRONT clearance before escape
+RECOVERY_REVERSE_MIN = 1.05      # minimum acceptable clearance if target cannot be reached
+RECOVERY_REVERSE_MAX_SEC = 6.0   # hard ceiling for reverse phase
+RECOVERY_REVERSE_TURN_MAX = 0.10 # only tiny centring correction is allowed in reverse
+
+# If front clearance is not improving, the buggy is not actually backing out.
+RECOVERY_PROGRESS_TIMEOUT = 1.00
+RECOVERY_MIN_PROGRESS = 0.10
+
+# Forward escape is also LiDAR guarded.
+ESCAPE_SPEED = 0.18
+ESCAPE_TURN = 0.55
+ESCAPE_MAX_SEC = 2.50
+ESCAPE_SIDE_MIN = 1.20          # side must have this much usable LiDAR clearance
+ESCAPE_FRONT_CLEAR = 1.00       # do not enter forward escape below this
+ESCAPE_RECONTACT_DIST = 0.65    # if front closes again, immediately reverse
+ESCAPE_CLEAR_CONFIRM_SEC = 0.35 # clearance must remain good before release
 
 # --- sign-based routing --------------------------------------------------------
 # The detector publishes a table like "A:LEFT,B:RIGHT,C:STRAIGHT". We keep the
@@ -529,6 +537,8 @@ class LineFollower(Node):
         self.lane_lost_since = None
         self.lane_lost_yaw = None
         self.front_dist = float('inf')
+        self.front_dist_raw = float('inf')
+        self.last_lidar_time = 0.0
         self.left_clear = float('inf')
         self.right_clear = float('inf')
         self.nearest_dist = float('inf')
@@ -584,6 +594,14 @@ class LineFollower(Node):
         self.recovery_return_state = None
         self.last_recovery_time = 0.0
         self.recovery_turn_sign = 1.0
+        self.recovery_phase = 'IDLE'
+        self.recovery_started_at = 0.0
+        self.recovery_start_front = float('inf')
+        self.recovery_best_front = float('inf')
+        self.recovery_last_progress = 0.0
+        self.recovery_escape_left = None
+        self.recovery_escape_started = 0.0
+        self.recovery_clear_since = None
 
         # ---------------- mission state ----------------
         self.state = State.INIT
@@ -698,93 +716,335 @@ class LineFollower(Node):
             return 0.0
         return max(min(err / math.pi * 2.0, 1.0), -1.0) * GOAL_BIAS_MAX
 
+    def lidar_is_fresh(self):
+        """Return True only when the current LiDAR scan is recent enough to trust."""
+        return (self.last_lidar_time > 0.0
+                and (time.time() - self.last_lidar_time) <= LIDAR_STALE_SEC)
+
     def is_stuck(self):
         """
-        True when we are commanding forward motion but not actually escaping.
+        LiDAR-only stuck detector for forward contact.
 
-        Two independent detectors, because either can be fooled alone: wheel
-        odometry lies when the wheels spin against an obstacle, and the LiDAR
-        corridor says nothing about a buggy beached on geometry it cannot see.
+        We intentionally do NOT use odometry as the recovery trigger here.
+        Wheel odometry can report motion while the buggy is physically pushing
+        against a cone/building. Conversely, slow legitimate approaches to a
+        building can look like a no-progress condition. The recovery trigger is
+        therefore a persistent close FRONT LiDAR return while the controller is
+        commanding forward motion.
         """
         if self.target_speed < STUCK_SPEED_MIN:
-            # Not trying to move (e.g. waiting in a zone) - not stuck.
-            self.last_progress_x = self.pose_x
-            self.last_progress_y = self.pose_y
-            self.last_progress_time = time.time()
             self.contact_since = None
             return False
+
         if time.time() - self.last_recovery_time < RECOVERY_COOLDOWN_SEC:
+            self.contact_since = None
             return False
-        # During a committed approach we are DELIBERATELY crawling right next
-        # to a building. Slow, close and deliberate is not stuck.
+
+        if not self.lidar_is_fresh():
+            self.contact_since = None
+            return False
+
+        # During a committed building approach, a close front return is expected
+        # and must never launch the reverse recovery.
         if self.approach_since is not None:
-            self.last_progress_x = self.pose_x
-            self.last_progress_y = self.pose_y
-            self.last_progress_time = time.time()
+            self.contact_since = None
             return False
 
-        # The LiDAR contact detector has been REMOVED. It declared "stuck"
-        # whenever anything sat inside the corridor closer than 0.45 m for two
-        # seconds - and that is precisely what pulling up beside a building
-        # looks like. It fired during correct approaches (we now stop at
-        # near ~0.65 m), reversed the buggy out of the zone, and left it off
-        # the road on the apron. The video-era detector used odometry alone
-        # and did not have this failure mode.
-        #
-        # Not covering ground while commanding motion is the honest signal.
-        if not self.have_pose:
-            return False
-        moved = math.hypot(self.pose_x - self.last_progress_x,
-                           self.pose_y - self.last_progress_y)
-        if moved > STUCK_MOVE_MIN:
-            self.last_progress_x = self.pose_x
-            self.last_progress_y = self.pose_y
-            self.last_progress_time = time.time()
-            return False
+        # Ignore the transient part of an ordinary obstacle avoidance manoeuvre.
+        # Recovery is for a sustained contact, not merely seeing an obstacle.
+        if self.front_dist < STUCK_CONTACT_DIST:
+            if self.contact_since is None:
+                self.contact_since = time.time()
+            elif time.time() - self.contact_since >= STUCK_CONTACT_SEC:
+                self.get_logger().warn(
+                    f"[STUCK-LIDAR] front={self.front_dist:.2f}m "
+                    f"raw={self.front_dist_raw:.2f}m for "
+                    f"{STUCK_CONTACT_SEC:.1f}s - recovery")
+                return True
+        else:
+            self.contact_since = None
 
-        return (time.time() - self.last_progress_time) > STUCK_WINDOW_SEC
+        return False
+
+    def choose_recovery_escape_side(self):
+        """
+        Choose the FORWARD escape side after the buggy has backed away.
+
+        Lane direction has priority when the lane is visible because the goal is
+        to re-enter the road, not simply to choose the side with the largest
+        raw LiDAR number. If the lane is unavailable, use the clearer side.
+        """
+        left_ok = self.left_clear >= ESCAPE_SIDE_MIN
+        right_ok = self.right_clear >= ESCAPE_SIDE_MIN
+
+        if self.lane_visible and abs(self.lane_turn) > 0.12:
+            lane_left = self.lane_turn > 0.0
+            if lane_left and left_ok:
+                return True
+            if (not lane_left) and right_ok:
+                return False
+
+        if left_ok and not right_ok:
+            return True
+        if right_ok and not left_ok:
+            return False
+        if left_ok and right_ok:
+            return self.left_clear >= self.right_clear
+
+        return None
 
     def enter_recovery(self):
-        """Begin a timed reverse manoeuvre, remembering where to return to."""
+        """Start a LiDAR-controlled reverse -> escape recovery manoeuvre."""
         if self.state == State.RECOVERY:
             return
+
+        # Recovery must be based on a live scan. Never blindly reverse if the
+        # sensor has stopped publishing.
+        if not self.lidar_is_fresh():
+            self.get_logger().warn(
+                "[RECOVERY] requested without fresh LiDAR - stopping instead")
+            self.set_control(0.0, 0.0)
+            return
+
         self.recovery_return_state = self.state
-        self.recovery_until = time.time() + REVERSE_SEC
-        # Reverse away from whichever side has less room, so we rotate toward
-        # the opening rather than back into the same trap.
-        self.recovery_turn_sign = (-1.0 if self.left_clear < self.right_clear
-                                   else 1.0)
+        now = time.time()
+        self.recovery_phase = 'REVERSE'
+        self.recovery_started_at = now
+        self.recovery_start_front = self.front_dist
+        self.recovery_best_front = self.front_dist
+        self.recovery_last_progress = now
+        self.recovery_escape_left = None
+        self.recovery_escape_started = 0.0
+        self.recovery_clear_since = None
+
+        # Kept only for compatibility/logging. Steering is intentionally NOT
+        # applied during the reverse phase.
+        self.recovery_turn_sign = 1.0
+
         self.get_logger().warn(
-            f"[RECOVERY] stuck detected - reversing out "
-            f"(front={self.front_dist:.2f} L={self.left_clear:.2f} "
-            f"R={self.right_clear:.2f})")
+            f"[RECOVERY] LiDAR recovery START "
+            f"front={self.front_dist:.2f} raw={self.front_dist_raw:.2f} "
+            f"L={self.left_clear:.2f} R={self.right_clear:.2f} "
+            f"target={RECOVERY_REVERSE_TARGET:.2f}m")
         self.set_state(State.RECOVERY)
 
     def drive_recovery(self):
-        """Back up, then turn away from the obstacle before resuming."""
+        """
+        LiDAR-controlled recovery:
+
+          1. REVERSE: back away with essentially zero steering until front
+             clearance is large enough.
+          2. ESCAPE: move forward briefly toward a LiDAR/lane-selected side.
+          3. Release only after the front remains clear; otherwise go back to
+             REVERSE.
+
+        This deliberately avoids the old 'reverse for N seconds with 0.55 turn'
+        behaviour, which could curve the buggy toward the cone line.
+        """
         now = time.time()
 
-        if now < self.recovery_until:
-            self.set_control(REVERSE_SPEED,
-                             REVERSE_TURN * self.recovery_turn_sign)
+        if not self.lidar_is_fresh():
+            self.set_control(0.0, 0.0)
+            self.get_logger().warn(
+                "[RECOVERY] LiDAR stale - holding STOP until scan returns")
             return
 
-        # Escape phase: drive forward while holding a turn away from whatever
-        # we hit. Without this the buggy reversed off the obstacle and then
-        # drove straight back into it, since its heading was unchanged.
-        if now < self.recovery_until + ESCAPE_SEC:
-            self.set_control(ESCAPE_SPEED,
-                             ESCAPE_TURN * self.recovery_turn_sign)
-            return
+        front = self.front_dist
 
-        self.last_recovery_time = now
-        self.last_progress_x = self.pose_x
-        self.last_progress_y = self.pose_y
-        self.last_progress_time = now
-        self.contact_since = None
-        back_to = self.recovery_return_state or State.SEEK_PATIENT
-        self.get_logger().info(f"[RECOVERY] complete -> {back_to.name}")
-        self.set_state(back_to)
+        # ------------------------------------------------------------------
+        # PHASE 1: REVERSE
+        # ------------------------------------------------------------------
+        if self.recovery_phase == 'REVERSE':
+            elapsed = now - self.recovery_started_at
+
+            # Track real LiDAR improvement. Opening distance must improve by a
+            # meaningful amount; otherwise the buggy may be turning in place or
+            # trapped against geometry.
+            if front > self.recovery_best_front + RECOVERY_MIN_PROGRESS:
+                self.recovery_best_front = front
+                self.recovery_last_progress = now
+
+            # Primary exit: enough front clearance has been created. Require the
+            # filtered value to be good AND the raw scan to agree, so one noisy
+            # LiDAR ray cannot terminate the reverse prematurely.
+            target_reached = (
+                front >= RECOVERY_REVERSE_TARGET
+                and self.front_dist_raw >= RECOVERY_REVERSE_TARGET * 0.90
+            )
+
+            minimum_reached = (
+                front >= RECOVERY_REVERSE_MIN
+                and self.front_dist_raw >= RECOVERY_REVERSE_MIN * 0.90
+            )
+
+            # If there is no viable forward escape yet, keep backing up. This is
+            # the key behaviour for the hospital/cone corridor: create distance
+            # first, decide the forward path second.
+            if target_reached or (minimum_reached and
+                                  self.choose_recovery_escape_side() is not None):
+                side = self.choose_recovery_escape_side()
+                if side is not None:
+                    self.recovery_escape_left = side
+                    self.recovery_escape_started = now
+                    self.recovery_clear_since = None
+                    self.recovery_phase = 'ESCAPE'
+                    self.get_logger().info(
+                        f"[RECOVERY] reverse clearance={front:.2f}m "
+                        f"-> ESCAPE {'LEFT' if side else 'RIGHT'} "
+                        f"(L={self.left_clear:.2f} R={self.right_clear:.2f} "
+                        f"lane={self.lane_turn:+.2f})")
+                    # Continue into ESCAPE below on the same control tick.
+                else:
+                    pass
+
+            if self.recovery_phase == 'REVERSE':
+                # If LiDAR is not improving, keep the vehicle straight while
+                # reversing. We do NOT add a large steering correction here.
+                # Straight reverse is intentional: it gets the buggy away from
+                # the cone/building pair instead of swinging its rear into one.
+                if now - self.recovery_last_progress > RECOVERY_PROGRESS_TIMEOUT:
+                    self.get_logger().warn(
+                        f"[RECOVERY] reverse clearance not improving "
+                        f"(front={front:.2f}, best={self.recovery_best_front:.2f})")
+                    # Continue straight reverse; the hard ceiling below prevents
+                    # an endless blind manoeuvre.
+
+                if elapsed >= RECOVERY_REVERSE_MAX_SEC:
+                    # At the hard ceiling, only enter escape if a usable side is
+                    # actually visible. Otherwise stop rather than guessing into
+                    # the cones.
+                    side = self.choose_recovery_escape_side()
+                    if side is not None and front >= RECOVERY_REVERSE_MIN:
+                        self.recovery_escape_left = side
+                        self.recovery_escape_started = now
+                        self.recovery_clear_since = None
+                        self.recovery_phase = 'ESCAPE'
+                        self.get_logger().warn(
+                            f"[RECOVERY] reverse max reached at {front:.2f}m "
+                            f"-> ESCAPE {'LEFT' if side else 'RIGHT'}")
+                    else:
+                        self.set_control(0.0, 0.0)
+                        self.get_logger().error(
+                            f"[RECOVERY] max reverse reached but no safe escape "
+                            f"(front={front:.2f} L={self.left_clear:.2f} "
+                            f"R={self.right_clear:.2f})")
+                        return
+
+                if self.recovery_phase == 'REVERSE':
+                    self.set_control(REVERSE_SPEED, 0.0)
+                    return
+
+        # ------------------------------------------------------------------
+        # PHASE 2: FORWARD ESCAPE
+        # ------------------------------------------------------------------
+        if self.recovery_phase == 'ESCAPE':
+            elapsed = now - self.recovery_escape_started
+
+            # If the front closes again, the chosen escape path is not actually
+            # free. Immediately return to the safer reverse phase and require
+            # more clearance before trying again.
+            if front < ESCAPE_RECONTACT_DIST:
+                self.get_logger().warn(
+                    f"[RECOVERY] escape re-contact front={front:.2f}m "
+                    "-> REVERSE AGAIN")
+                self.recovery_phase = 'REVERSE'
+                self.recovery_started_at = now
+                self.recovery_best_front = front
+                self.recovery_last_progress = now
+                self.recovery_escape_left = None
+                self.recovery_clear_since = None
+                self.set_control(REVERSE_SPEED, 0.0)
+                return
+
+            # Re-evaluate only for safety. Do not flip sides every tick. The
+            # chosen side remains latched for this escape.
+            side = self.recovery_escape_left
+            if side is None:
+                side = self.choose_recovery_escape_side()
+                self.recovery_escape_left = side
+
+            if side is None:
+                self.get_logger().warn(
+                    "[RECOVERY] no viable escape side - reversing")
+                self.recovery_phase = 'REVERSE'
+                self.recovery_started_at = now
+                self.recovery_best_front = front
+                self.recovery_last_progress = now
+                self.set_control(REVERSE_SPEED, 0.0)
+                return
+
+            # If the selected side collapses, do not steer into it. Return to
+            # reverse and create more longitudinal clearance.
+            side_clear = self.left_clear if side else self.right_clear
+            if side_clear < 0.75:
+                self.get_logger().warn(
+                    f"[RECOVERY] escape side collapsed to {side_clear:.2f}m "
+                    "-> REVERSE AGAIN")
+                self.recovery_phase = 'REVERSE'
+                self.recovery_started_at = now
+                self.recovery_best_front = front
+                self.recovery_last_progress = now
+                self.recovery_escape_left = None
+                self.set_control(REVERSE_SPEED, 0.0)
+                return
+
+            # Lane has authority if visible. Otherwise use the latched LiDAR side.
+            if self.lane_visible and abs(self.lane_turn) > 0.12:
+                turn = max(min(self.lane_turn, ESCAPE_TURN), -ESCAPE_TURN)
+            else:
+                turn = ESCAPE_TURN if side else -ESCAPE_TURN
+
+            # Keep the forward escape slow; its purpose is to change heading and
+            # re-enter the lane, not to accelerate away blindly.
+            self.set_control(ESCAPE_SPEED, turn)
+
+            if front >= ESCAPE_FRONT_CLEAR:
+                if self.recovery_clear_since is None:
+                    self.recovery_clear_since = now
+                elif now - self.recovery_clear_since >= ESCAPE_CLEAR_CONFIRM_SEC:
+                    back_to = self.recovery_return_state or State.SEEK_PATIENT
+                    self.last_recovery_time = now
+                    self.contact_since = None
+                    self.last_progress_x = self.pose_x
+                    self.last_progress_y = self.pose_y
+                    self.last_progress_time = now
+                    self.recovery_phase = 'IDLE'
+                    self.recovery_escape_left = None
+                    self.get_logger().info(
+                        f"[RECOVERY] complete front={front:.2f}m "
+                        f"-> {back_to.name}")
+                    self.set_state(back_to)
+                    return
+            else:
+                self.recovery_clear_since = None
+
+            if elapsed >= ESCAPE_MAX_SEC:
+                # The escape has had enough time. Only release if the front is
+                # genuinely clear; otherwise go back to reverse instead of
+                # returning control to lane following while still trapped.
+                if front >= ESCAPE_FRONT_CLEAR:
+                    back_to = self.recovery_return_state or State.SEEK_PATIENT
+                    self.last_recovery_time = now
+                    self.contact_since = None
+                    self.last_progress_x = self.pose_x
+                    self.last_progress_y = self.pose_y
+                    self.last_progress_time = now
+                    self.recovery_phase = 'IDLE'
+                    self.recovery_escape_left = None
+                    self.get_logger().info(
+                        f"[RECOVERY] escape timeout but path clear "
+                        f"front={front:.2f}m -> {back_to.name}")
+                    self.set_state(back_to)
+                else:
+                    self.recovery_phase = 'REVERSE'
+                    self.recovery_started_at = now
+                    self.recovery_best_front = front
+                    self.recovery_last_progress = now
+                    self.recovery_escape_left = None
+                    self.get_logger().warn(
+                        f"[RECOVERY] escape timeout while blocked "
+                        f"front={front:.2f}m -> REVERSE")
+                return
 
     def qr_is_fresh(self):
         return (self.last_qr is not None
@@ -847,7 +1107,7 @@ class LineFollower(Node):
             # --- V-fork: the two boundaries are two different branches ----
             if ratio > FORK_WIDTH_RATIO:
                 self.fork_until = now + FORK_HOLD_SEC
-            in_fork = now < self.fork_until
+            in_fork = now < self.fork_until and self.front_dist >= OBSTACLE_SLOW_DIST
 
             if in_fork:
                 want = self.pending_turn if self.pending_turn in (
@@ -999,6 +1259,8 @@ class LineFollower(Node):
         if n == 0:
             return
 
+        self.last_lidar_time = time.time()
+
         angle_min = message.angle_min
         angle_inc = message.angle_increment if message.angle_increment else (
             2.0 * math.pi / n)
@@ -1040,7 +1302,12 @@ class LineFollower(Node):
             return best_r, bearing
 
         # Bearings in the sensor frame: 0 rad = forward, +90 = left, -90 = right.
-        self.front_dist = sector_min(0, FRONT_ARC_DEG)
+        raw_front = sector_min(0, FRONT_ARC_DEG)
+        if raw_front <= self.front_dist_raw:
+            self.front_dist = raw_front   # closing: react instantly, never delay safety
+        else:
+            self.front_dist = 0.5 * self.front_dist + 0.5 * raw_front  # opening: ease out
+        self.front_dist_raw = raw_front
         self.left_clear = sector_min(90, SIDE_ARC_DEG)
         self.right_clear = sector_min(-90, SIDE_ARC_DEG)
         self.obstacle_block = self.front_dist < OBSTACLE_STOP_DIST
@@ -1089,10 +1356,11 @@ class LineFollower(Node):
             if now - self._last_lidar_log > 0.5:
                 self._last_lidar_log = now
                 self.get_logger().info(
-                    f"[LIDAR] front={self.front_dist:.2f} "
+                    f"[LIDAR] front={self.front_dist:.2f} raw={self.front_dist_raw:.2f} "
                     f"near={self.nearest_dist:.2f} "
                     f"L={self.left_clear:.2f} R={self.right_clear:.2f} "
-                    f"block={self.obstacle_block}")
+                    f"block={self.obstacle_block} "
+                    f"age={time.time()-self.last_lidar_time:.2f}s")
 
     def qr_detection_callback(self, message):
         """Normalise a QR payload such as '{LOC: PATIENT_1}' to 'PATIENT_1'."""
@@ -1465,9 +1733,9 @@ class LineFollower(Node):
     def control_loop(self):
         self.server.tick()
 
-        # Stuck detection runs above the state machine: being wedged against a
-        # wall is possible from any driving state, and no other behaviour can
-        # escape it because the normal control path never commands reverse.
+        # LiDAR-based stuck detection runs above the state machine: a sustained
+        # close front return while commanding forward motion is the recovery
+        # trigger. Normal control never commands reverse.
         if self.state not in (State.RECOVERY, State.DONE,
                               State.WAIT_ASSIGNMENT, State.WAIT_NEXT):
             if self.is_stuck():
@@ -1606,9 +1874,17 @@ class LineFollower(Node):
         # with more room but KEEP part of the lane term so we do not rotate
         # blindly across a boundary.
         if self.front_dist < OBSTACLE_STOP_DIST:
-            escape = 0.7 if self.dodge_left() else -0.7
+            dodge_choice = self.dodge_left()
+            side_now_clear = self.left_clear if dodge_choice else self.right_clear
+            if side_now_clear < 0.60:
+                self.get_logger().warn(
+                    f"[AVOID] chosen side collapsed to {side_now_clear:.2f}m "
+                    f"mid-dodge - reversing out")
+                self.enter_recovery()
+                return
+            escape = 0.7 if dodge_choice else -0.7
             turn = max(min(0.5 * self.lane_turn + escape, TURN_MAX), -TURN_MAX)
-            self.set_control(AVOID_BRAKE_SPEED, turn)  # crawl, do not stop
+            self.set_control(AVOID_BRAKE_SPEED, turn)
             return
 
         # Proportional avoidance: ramps from 0 at OBSTACLE_SLOW_DIST to full
