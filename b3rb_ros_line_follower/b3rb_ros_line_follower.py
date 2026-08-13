@@ -118,7 +118,7 @@ FORK_WIDTH_RATIO = 1.45      # observed/learned width above this = fork
 # but no longer pinned, so it tracks into the branch instead of swinging.
 FORK_KP = 0.85               # direct gain on the aim point at a fork
 FORK_SPEED = 0.22            # crawl: a tight branch entry needs time
-FORK_HOLD_SEC = 2.0          # keep fork mode long enough to clear the split
+FORK_HOLD_SEC = 1.2          # keep fork mode long enough to clear the split
 
 # --- curve inner-line bias -----------------------------------------------
 # On a bend, perspective pulls the far end of the INSIDE boundary toward the
@@ -174,6 +174,7 @@ AVOID_HOLD_SEC = 1.5         # hold the chosen dodge side this long past last tr
 # the 1.10 bar, and the buggy squeezed into the tighter gap and clipped. A gap
 # barely wider than the trigger range is not somewhere to aim a swerve.
 AVOID_SIDE_MIN = 2.20        # side clearance needed before the lane may choose it
+LANE_VETO_DEVIATION = 0.30
 AVOID_SIDE_RATIO = 2.0       # ...or if the other side is this many times wider,
                              # take the open side regardless of what the lane wants
 # Widened from 22. A thin obstacle - pole, tree trunk - sitting ~25 deg off
@@ -529,6 +530,7 @@ class LineFollower(Node):
         self.lane_lost_since = None
         self.lane_lost_yaw = None
         self.front_dist = float('inf')
+        self.front_dist_raw = float('inf')
         self.left_clear = float('inf')
         self.right_clear = float('inf')
         self.nearest_dist = float('inf')
@@ -1194,9 +1196,21 @@ class LineFollower(Node):
         # If one side is overwhelmingly more open than the other, take it and
         # do not argue - a 7 m gap against a 1.5 m gap is not a close call,
         # whatever the lane happens to prefer at this instant.
-        lopsided_left = self.left_clear > AVOID_SIDE_RATIO * self.right_clear
+        llopsided_left = self.left_clear > AVOID_SIDE_RATIO * self.right_clear
         lopsided_right = self.right_clear > AVOID_SIDE_RATIO * self.left_clear
 
+        # LANE-BOUNDARY VETO. LiDAR clearance cannot tell road from apron:
+        # measured L=3.98 R=0.52 beside the hospital, where the 3.98 m was
+        # open ground off the track. The camera does know. lane_deviation is
+        # positive when the lane centre lies to our LEFT - i.e. we are already
+        # displaced RIGHT of centre - so a large positive deviation means a
+        # further RIGHT dodge crosses the boundary, and vice versa. Veto the
+        # side we are already displaced toward, whatever the clearance says.
+        if self.lane_confidence >= 1:
+            if self.lane_deviation > LANE_VETO_DEVIATION:
+                lopsided_right = False      # already right of centre
+            elif self.lane_deviation < -LANE_VETO_DEVIATION:
+                lopsided_left = False       # already left of centre
         if lopsided_left:
             choice = True
         elif lopsided_right:
@@ -1207,6 +1221,11 @@ class LineFollower(Node):
             choice = False
         else:
             choice = self.left_clear > self.right_clear
+            if self.lane_confidence >= 1:
+                if choice and self.lane_deviation < -LANE_VETO_DEVIATION:
+                    choice = False
+                elif (not choice) and self.lane_deviation > LANE_VETO_DEVIATION:
+                    choice = True
 
         self.dodge_side_left = choice
         self.dodge_until = now + AVOID_HOLD_SEC
